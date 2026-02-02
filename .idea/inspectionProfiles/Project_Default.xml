@@ -1,0 +1,59 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="python-doctr" />
+          <option value="aiohappyeyeballs" />
+          <option value="aiohttp" />
+          <option value="aiosignal" />
+          <option value="async-timeout" />
+          <option value="attrs" />
+          <option value="dataclasses-json" />
+          <option value="distro" />
+          <option value="einops" />
+          <option value="frozenlist" />
+          <option value="ftfy" />
+          <option value="greenlet" />
+          <option value="httpx-sse" />
+          <option value="jiter" />
+          <option value="joblib" />
+          <option value="jsonpatch" />
+          <option value="jsonpointer" />
+          <option value="langchain" />
+          <option value="langchain-community" />
+          <option value="langchain-core" />
+          <option value="langchain-openai" />
+          <option value="langchain-text-splitters" />
+          <option value="langsmith" />
+          <option value="marshmallow" />
+          <option value="multidict" />
+          <option value="mypy_extensions" />
+          <option value="openai" />
+          <option value="opencv-python-headless" />
+          <option value="orjson" />
+          <option value="paddlex" />
+          <option value="propcache" />
+          <option value="pydantic-settings" />
+          <option value="python-dotenv" />
+          <option value="regex" />
+          <option value="requests-toolbelt" />
+          <option value="safetensors" />
+          <option value="scikit-learn" />
+          <option value="sentencepiece" />
+          <option value="sniffio" />
+          <option value="SQLAlchemy" />
+          <option value="tenacity" />
+          <option value="test-py" />
+          <option value="threadpoolctl" />
+          <option value="tiktoken" />
+          <option value="tokenizers" />
+          <option value="typing-inspect" />
+          <option value="yarl" />
+          <option value="zstandard" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

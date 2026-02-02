@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login | DreamStay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <style>
+        body{
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            height:100vh;
+            background:#f4f6f9;
+        }
+
+        .card{
+            max-width:420px;
+            width:100%;
+        }
+
+        button{
+            width:100%;
+            margin-top:10px;
+        }
+
+        .tabs{
+            display:flex;
+            gap:10px;
+            margin-bottom:14px;
+        }
+
+        .tabs button{
+            flex:1;
+        }
+    </style>
+</head>
+
+
+<body>
+
+<div class="card">
+
+    <h2 style="text-align:center;margin-bottom:16px;">DreamStay Portal</h2>
+
+
+    <!-- ROLE SWITCH -->
+    <div class="tabs">
+        <button onclick="showUser()">User</button>
+        <button onclick="showAdmin()">Admin</button>
+    </div>
+
+
+    <!-- USER -->
+    <div id="userBox">
+        <p class="info-text">Browse hotels without login</p>
+        <button onclick="goHome()">Continue as Guest</button>
+    </div>
+
+
+    <!-- ADMIN -->
+    <div id="adminBox" style="display:none;">
+
+        <input id="username" placeholder="Username">
+        <input id="password" type="password" placeholder="Password">
+
+        <button onclick="adminLogin()">Login</button>
+
+        <p id="msg" class="error-text"></p>
+    </div>
+
+</div>
+
+
+
+<script>
+
+function showUser(){
+    userBox.style.display="block";
+    adminBox.style.display="none";
+}
+
+function showAdmin(){
+    userBox.style.display="none";
+    adminBox.style.display="block";
+}
+
+function goHome(){
+    location.href="/home";
+}
+
+async function adminLogin(){
+
+    const res=await fetch("/admin/login",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            username:username.value,
+            password:password.value
+        })
+    });
+
+    const result=await res.json();
+
+    if(result.message)
+        location.href="/admin_dashboard";
+    else
+        msg.innerText=result.error;
+}
+
+</script>
+
+</body>
+</html>

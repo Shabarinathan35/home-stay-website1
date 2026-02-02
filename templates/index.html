@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Hotels | DreamStay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <style>
+        /* page specific */
+        .page-title{
+            padding:14px 20px;
+            background:#003580;
+            color:white;
+            font-weight:600;
+        }
+
+        .rooms-grid{
+            display:grid;
+            grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+            gap:12px;
+            margin-top:12px;
+        }
+
+        .room-card{
+            background:#f8fafc;
+            padding:10px;
+            border-radius:8px;
+            text-align:center;
+        }
+
+        .room-card img{
+            width:100%;
+            height:120px;
+            object-fit:cover;
+            border-radius:6px;
+        }
+
+        button{
+            width:100%;
+        }
+    </style>
+</head>
+
+
+<body>
+
+<!-- ================= HEADER ================= -->
+<div class="page-title">
+    DreamStay – Find Your Perfect Stay
+</div>
+
+
+<!-- ================= SEARCH BAR ================= -->
+<div class="search-bar">
+
+    <select id="country">
+        <option value="">Country</option>
+    </select>
+
+    <select id="state">
+        <option value="">State</option>
+    </select>
+
+    <select id="city">
+        <option value="">City</option>
+    </select>
+
+    <input
+        type="range"
+        min="500"
+        max="10000"
+        value="10000"
+        id="priceSlider"
+        onchange="filterPrice(this.value)"
+    >
+
+    <button onclick="search()">Search</button>
+</div>
+
+
+
+<!-- ================= MAIN ================= -->
+<div class="layout">
+
+    <!-- FILTERS -->
+    <aside class="filters">
+        <h4>Filters</h4>
+
+        <button onclick="sortLow()">₹ Low → High</button>
+        <button onclick="sortHigh()">₹ High → Low</button>
+    </aside>
+
+
+    <!-- RESULTS -->
+    <section id="homestays">
+        <!-- injected by JS -->
+    </section>
+
+</div>
+
+
+
+<!-- ================= BOOKING MODAL ================= -->
+<div id="bookingModal" class="modal" style="display:none">
+    <div class="modal-content">
+
+        <h3>Book Room</h3>
+
+        <input id="custName" placeholder="Your Name">
+        <input id="custPhone" placeholder="Phone Number">
+        <input id="custDate" type="date">
+
+        <button onclick="confirmBooking()">Confirm Booking</button>
+        <button class="secondary-btn" onclick="closeModal()">Cancel</button>
+
+    </div>
+</div>
+
+
+
+<!-- ================= JS ================= -->
+<script src="/static/js/app.js"></script>
+
+<script>
+
+let selectedRoomId=null;
+let priceLimit=10000;
+
+/* ================= LOAD HOTELS ================= */
+
+fetch("/hotels_with_rooms")
+.then(r=>r.json())
+.then(renderHotels);
+
+function renderHotels(data){
+
+    const container=document.getElementById("homestays");
+    container.innerHTML="";
+
+    data.forEach(h=>{
+
+        let rooms="";
+
+        h.rooms
+        .filter(r=>r.price<=priceLimit)
+        .forEach(r=>{
+            rooms+=`
+                <div class="room-card">
+                    <img src="/static/uploads/rooms/${r.image}">
+                    <p>₹${r.price}</p>
+                    <button onclick="openBooking(${r.id})">Book</button>
+                </div>
+            `;
+        });
+
+        container.innerHTML+=`
+            <div class="card">
+                <img src="/static/uploads/rooms/${h.image}">
+                <h3>${h.name}</h3>
+                <p>${h.description||""}</p>
+                <div class="rooms-grid">${rooms}</div>
+            </div>
+        `;
+    });
+}
+
+/* ================= PRICE FILTER ================= */
+
+function filterPrice(val){
+    priceLimit=val;
+    fetch("/hotels_with_rooms")
+        .then(r=>r.json())
+        .then(renderHotels);
+}
+
+/* ================= BOOKING ================= */
+
+function openBooking(id){
+    selectedRoomId=id;
+    bookingModal.style.display="flex";
+}
+
+function closeModal(){
+    bookingModal.style.display="none";
+}
+
+async function confirmBooking(){
+
+    const res=await fetch("/book",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            room_id:selectedRoomId,
+            name:custName.value,
+            phone:custPhone.value,
+            date:custDate.value
+        })
+    });
+
+    const result=await res.json();
+
+    alert(result.message||result.error);
+    closeModal();
+}
+
+</script>
+
+</body>
+</html>

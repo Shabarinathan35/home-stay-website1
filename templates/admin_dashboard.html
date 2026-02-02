@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard | Homestay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- MAIN CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* ===============================
+           EXTRA ADMIN STYLES (safe add)
+        =============================== */
+
+        button{
+            width:100%;
+        }
+
+        .admin-section{
+            display:none;
+        }
+
+        .stats-grid{
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+            gap:16px;
+            margin-bottom:20px;
+        }
+
+        .stat-card{
+            background:#fff;
+            padding:18px;
+            border-radius:10px;
+            text-align:center;
+            box-shadow:0 6px 18px rgba(0,0,0,.08);
+        }
+
+        .stat-card h2{
+            margin-top:8px;
+            color:#0071c2;
+        }
+
+        .room-images-preview{
+            display:flex;
+            gap:8px;
+            flex-wrap:wrap;
+            margin-bottom:10px;
+        }
+
+        .room-images-preview img{
+            width:80px;
+            height:80px;
+            object-fit:cover;
+            border-radius:6px;
+        }
+
+        canvas{
+            margin-top:20px;
+            background:#fff;
+            padding:16px;
+            border-radius:10px;
+        }
+    </style>
+</head>
+
+
+<body>
+
+<!-- =====================================================
+     HEADER
+===================================================== -->
+<header class="admin-header">
+    <h2>Homestay Admin Dashboard</h2>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+</header>
+
+
+<!-- =====================================================
+     LAYOUT
+===================================================== -->
+<div class="admin-layout">
+
+    <!-- =================================================
+         SIDEBAR
+    ================================================== -->
+    <aside class="admin-sidebar">
+
+        <button onclick="showSection('setup')">🏨 Setup Hotel</button>
+        <button onclick="showSection('bookings')">📅 Bookings</button>
+        <button onclick="showSection('analytics')">📊 Analytics</button>
+        <button onclick="showSection('reports')">💰 Reports</button>
+
+    </aside>
+
+
+    <!-- =================================================
+         MAIN CONTENT
+    ================================================== -->
+    <main class="admin-content">
+
+        <!-- =================================================
+             1️⃣ HOTEL + ROOM SETUP
+        ================================================== -->
+        <section id="setup" class="admin-section" style="display:block">
+
+            <div class="card glass">
+
+                <h3>Complete Hotel Setup</h3>
+
+                <form id="setupForm" enctype="multipart/form-data">
+
+                    <!-- LOCATION -->
+                    <select id="country" required></select>
+                    <select id="state" required></select>
+                    <select id="city" required></select>
+
+                    <!-- HOTEL -->
+                    <input name="hotel" placeholder="Hotel Name" required>
+                    <textarea name="hotelDesc" placeholder="Hotel Description"></textarea>
+
+                    <!-- ROOM -->
+                    <input name="price" placeholder="Price" required>
+                    <input name="available" placeholder="Available Rooms" required>
+                    <textarea name="roomDesc" placeholder="Room Description"></textarea>
+
+                    <!-- MULTIPLE IMAGES -->
+                    <input type="file" name="images" multiple onchange="previewMultiple(this)">
+
+                    <div id="previewBox" class="room-images-preview"></div>
+
+                    <button type="submit">Submit Setup</button>
+
+                </form>
+
+                <div id="msg"></div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             2️⃣ BOOKINGS TABLE
+        ================================================== -->
+        <section id="bookings" class="admin-section">
+
+            <h3>All Bookings</h3>
+
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Room</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+
+                <tbody id="bookingTable"></tbody>
+            </table>
+
+        </section>
+
+
+
+        <!-- =================================================
+             3️⃣ ANALYTICS
+        ================================================== -->
+        <section id="analytics" class="admin-section">
+
+            <h3>Booking Analytics</h3>
+
+            <canvas id="dailyChart"></canvas>
+            <canvas id="monthlyChart"></canvas>
+            <canvas id="yearlyChart"></canvas>
+
+        </section>
+
+
+
+        <!-- =================================================
+             4️⃣ REPORTS
+        ================================================== -->
+        <section id="reports" class="admin-section">
+
+            <h3>Reports</h3>
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+                    <p>Total Revenue</p>
+                    <h2 id="rev">₹0</h2>
+                </div>
+
+                <div class="stat-card">
+                    <p>Occupancy %</p>
+                    <h2 id="occ">0%</h2>
+                </div>
+
+            </div>
+
+            <button onclick="downloadCSV()">Export Bookings CSV</button>
+
+        </section>
+
+
+    </main>
+</div>
+
+
+
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
+<script src="/static/js/app.js"></script>
+
+<script>
+
+    /* =========================================
+       SECTION SWITCH
+    ========================================= */
+    function showSection(id){
+        document.querySelectorAll(".admin-section")
+            .forEach(s=>s.style.display="none");
+
+        document.getElementById(id).style.display="block";
+    }
+
+
+    /* =========================================
+       MULTIPLE IMAGE PREVIEW
+    ========================================= */
+    function previewMultiple(input){
+
+        const box = document.getElementById("previewBox");
+        box.innerHTML="";
+
+        Array.from(input.files).forEach(f=>{
+            const img=document.createElement("img");
+            img.src=URL.createObjectURL(f);
+            box.appendChild(img);
+        });
+    }
+
+
+    /* =========================================
+       LOAD BOOKINGS TABLE
+    ========================================= */
+    fetch("/admin/bookings")
+    .then(r=>r.json())
+    .then(data=>{
+
+        const table=document.getElementById("bookingTable");
+
+        data.forEach(b=>{
+            table.innerHTML+=`
+                <tr>
+                    <td>${b.id}</td>
+                    <td>${b.room}</td>
+                    <td>${b.name}</td>
+                    <td>${b.phone}</td>
+                    <td>${b.date}</td>
+                    <td>${b.status}</td>
+                    <td>
+                        ${b.status==='CONFIRMED'
+                            ? `<button onclick="cancel(${b.id})">Cancel</button>`
+                            : '-'}
+                    </td>
+                </tr>`;
+        });
+    });
+
+
+    function cancel(id){
+        fetch("/cancel/"+id,{method:"POST"})
+        .then(()=>location.reload());
+    }
+
+
+    /* =========================================
+       ANALYTICS CHARTS
+    ========================================= */
+
+    async function loadChart(url, canvasId){
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        new Chart(document.getElementById(canvasId),{
+            type:'bar',
+            data:{
+                labels:data.map(x=>Object.values(x)[0]),
+                datasets:[{
+                    label:'Bookings',
+                    data:data.map(x=>x.total)
+                }]
+            }
+        });
+    }
+
+    loadChart("/admin/stats/daily","dailyChart");
+    loadChart("/admin/stats/monthly","monthlyChart");
+    loadChart("/admin/stats/yearly","yearlyChart");
+
+
+    /* =========================================
+       REPORTS
+    ========================================= */
+
+    fetch("/admin/revenue")
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById("rev").innerText="₹"+(d[0]?.revenue||0);
+    });
+
+    fetch("/admin/occupancy")
+    .then(r=>r.json())
+    .then(d=>{
+        document.getElementById("occ").innerText=d.occupancy+"%";
+    });
+
+    function downloadCSV(){
+        window.location="/admin/export_csv";
+    }
+
+</script>
+
+</body>
+</html>
