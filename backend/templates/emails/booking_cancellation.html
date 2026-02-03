@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .container { padding: 20px; background-color: #f9f9f9; }
+    .header { font-size: 20px; font-weight: bold; color: #b22222; }
+    .details { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">Booking Cancelled</div>
+    <p>Dear {{ username }},</p>
+    <p>Your booking has been cancelled successfully.</p>
+    <div class="details">
+      <p><strong>Room:</strong> {{ room.room_number }} ({{ room.room_type }})</p>
+      <p><strong>Check-in:</strong> {{ check_in }}</p>
+      <p><strong>Check-out:</strong> {{ check_out }}</p>
+    </div>
+    <p>We hope to serve you again in the future.</p>
+    <p>— The Hotel Team</p>
+  </div>
+</body>
+</html>
