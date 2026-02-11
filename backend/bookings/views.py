@@ -1,173 +1,229 @@
 import stripe
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import viewsets, permissions
-from .models import Booking
-from .serializers import BookingSerializer
-from rest_framework import viewsets, permissions, serializers
-from .models import Booking
-from .serializers import BookingSerializer
-from django.core.mail import send_mailfrom django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
+
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from rest_framework import viewsets, permissions
+from rest_framework.decorators import api_view, action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAdminUser
+from rest_framework.exceptions import ValidationError, NotFound
+
+from .models import Booking
+from .serializers import BookingSerializer
+from rooms.models import Room
+
+
+# --------------------------------------------------
+# Stripe configuration
+# --------------------------------------------------
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+
+# ==================================================
+# ADMIN BOOKINGS (READ ONLY)
+# ==================================================
+class AdminBookingViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Booking.objects.select_related("user", "room")
+    serializer_class = BookingSerializer
+    permission_classes = [IsAdminUser]
+
+
+# ==================================================
+# BOOKINGS (USER)
+# ==================================================
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all()
     serializer_class = BookingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return Booking.objects.all()
+        return Booking.objects.filter(user=user)
+
+    @action(detail=False, methods=["get"])
+    def my_bookings(self, request):
+        bookings = Booking.objects.filter(user=request.user)
+        serializer = self.get_serializer(bookings, many=True)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
-        # existing confirmation email logic here...
+        room = serializer.validated_data["room"]
+        check_in = serializer.validated_data["check_in"]
+        check_out = serializer.validated_data["check_out"]
+
+        if check_in >= check_out:
+            raise ValidationError("Check-out date must be after check-in date.")
+
+        # Prevent double booking
+        if Booking.objects.filter(
+            room=room,
+            check_in__lt=check_out,
+            check_out__gt=check_in
+        ).exists():
+            raise ValidationError("Room already booked for selected dates.")
+
         booking = serializer.save(user=self.request.user)
-        # send confirmation email (already implemented)
+
+        # -------------------------
+        # Customer confirmation email
+        # -------------------------
+        html_content = render_to_string(
+            "emails/booking_confirmation.html",
+            {
+                "username": self.request.user.username,
+                "room": room,
+                "check_in": check_in,
+                "check_out": check_out,
+            }
+        )
+
+        send_mail(
+            subject="Booking Confirmation",
+            message="Your booking has been confirmed.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[self.request.user.email],
+            html_message=html_content,
+            fail_silently=False,
+        )
+
+        # -------------------------
+        # Admin notification email
+        # -------------------------
+        admin_html = render_to_string(
+            "emails/admin_booking_alert.html",
+            {
+                "username": self.request.user.username,
+                "room": room,
+                "check_in": check_in,
+                "check_out": check_out,
+            }
+        )
+
+        admin_email = EmailMultiAlternatives(
+            subject="New Booking Alert",
+            body="A new booking has been created.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=settings.ADMIN_EMAILS,
+        )
+        admin_email.attach_alternative(admin_html, "text/html")
+        admin_email.send()
 
     def destroy(self, request, *args, **kwargs):
         booking = self.get_object()
-        room = booking.room
-        check_in = booking.check_in
-        check_out = booking.check_out
-        username = booking.user.username
-        email = booking.user.email
 
-        # Delete booking
+        if booking.user != request.user and not request.user.is_staff:
+            raise ValidationError("You are not allowed to cancel this booking.")
+
+        html_content = render_to_string(
+            "emails/booking_cancellation.html",
+            {
+                "username": booking.user.username,
+                "room": booking.room,
+                "check_in": booking.check_in,
+                "check_out": booking.check_out,
+            }
+        )
+
         response = super().destroy(request, *args, **kwargs)
 
-        # Send cancellation email
-        subject = "Booking Cancellation"
-        from_email = "hotel@example.com"
-        to_email = [email]
-
-        text_content = f"Dear {username},\nYour booking for Room {room.room_number} from {check_in} to {check_out} has been cancelled."
-        html_content = render_to_string("emails/booking_cancellation.html", {
-            "username": username,
-            "room": room,
-            "check_in": check_in,
-            "check_out": check_out,
-        })
-
-        msg = EmailMultiAlternatives(subject, text_content, from_email, to_email)
-        msg.attach_alternative(html_content, "text/html")
-        msg.send()
+        send_mail(
+            subject="Booking Cancelled",
+            message="Your booking has been cancelled.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[booking.user.email],
+            html_message=html_content,
+            fail_silently=False,
+        )
 
         return response
 
 
-class BookingViewSet(viewsets.ModelViewSet):
-    queryset = Booking.objects.all()
-    serializer_class = BookingSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        room = serializer.validated_data['room']
-        check_in = serializer.validated_data['check_in']
-        check_out = serializer.validated_data['check_out']
-
-        # Prevent double booking
-        if Booking.objects.filter(room=room, check_in__lt=check_out, check_out__gt=check_in).exists():
-            raise serializers.ValidationError("Room is already booked for these dates.")
-
-        booking = serializer.save(user=self.request.user)
-
-        # Send confirmation email
-        send_mail(
-            subject="Booking Confirmation",
-            message=f"Dear {self.request.user.username},\n\n"
-                    f"Your booking for Room {room.room_number} "
-                    f"from {check_in} to {check_out} has been confirmed.\n\n"
-                    f"Thank you for choosing our hotel!",
-            from_email="hotel@example.com",  # or DEFAULT_FROM_EMAIL
-            recipient_list=[self.request.user.email],
-            fail_silently=False,
-        )
-
-class BookingViewSet(viewsets.ModelViewSet):
-    queryset = Booking.objects.all()
-    serializer_class = BookingSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        room = serializer.validated_data['room']
-        check_in = serializer.validated_data['check_in']
-        check_out = serializer.validated_data['check_out']
-        if Booking.objects.filter(room=room, check_in__lt=check_out, check_out__gt=check_in).exists():
-            raise serializers.ValidationError("Room is already booked for these dates.")
-        serializer.save(user=self.request.user)
-
-
-stripe.api_key = "your_secret_key"
-
-@api_view(['POST'])
+# ==================================================
+# PAYMENTS
+# ==================================================
+@api_view(["POST"])
 def create_payment(request):
     amount = request.data.get("amount")
-    intent = stripe.PaymentIntent.create(
-        amount=int(amount * 100),  # convert to cents
-        currency="usd",
-        payment_method_types=["card"],
-    )
+
+    if not amount:
+        raise ValidationError("Amount is required.")
+
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=int(float(amount) * 100),
+            currency="usd",
+            payment_method_types=["card"],
+        )
+    except Exception as e:
+        raise ValidationError(str(e))
+
     return Response({"client_secret": intent.client_secret})
 
-# bookings/views.py
 
-class BookingViewSet(viewsets.ModelViewSet):
-    queryset = Booking.objects.all()
-    serializer_class = BookingSerializer
-    permission_classes = [permissions.IsAuthenticated]
+@api_view(["POST"])
+def confirm_payment(request):
+    booking_id = request.data.get("booking_id")
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    if not booking_id:
+        raise ValidationError("booking_id is required.")
+
+    try:
+        booking = Booking.objects.get(id=booking_id)
+    except Booking.DoesNotExist:
+        raise NotFound("Booking not found.")
+
+    booking.payment_status = "paid"
+    booking.save()
+
+    return Response({"status": "Payment confirmed"})
 
 
+# ==================================================
+# ROOM AVAILABILITY
+# ==================================================
+@api_view(["GET"])
+def available_rooms(request):
+    check_in = request.GET.get("check_in")
+    check_out = request.GET.get("check_out")
 
-def perform_create(self, serializer):
-    room = serializer.validated_data['room']
-    check_in = serializer.validated_data['check_in']
-    check_out = serializer.validated_data['check_out']
+    if not check_in or not check_out:
+        raise ValidationError("check_in and check_out are required.")
 
-    # Prevent double booking
-    if Booking.objects.filter(room=room, check_in__lt=check_out, check_out__gt=check_in).exists():
-        raise serializers.ValidationError("Room is already booked for these dates.")
+    booked_rooms = Booking.objects.filter(
+        check_in__lt=check_out,
+        check_out__gt=check_in
+    ).values_list("room_id", flat=True)
 
-    booking = serializer.save(user=self.request.user)
+    rooms = Room.objects.exclude(id__in=booked_rooms)
 
-    # Customer confirmation email (already implemented)
+    data = [
+        {
+            "id": room.id,
+            "room_number": room.room_number,
+            "room_type": room.room_type,
+            "price": room.price,
+        }
+        for room in rooms
+    ]
 
-    # Admin notification email
-    subject = "New Booking Alert"
-    text_content = f"New booking: {self.request.user.username} booked Room {room.room_number} from {check_in} to {check_out}."
-    html_content = render_to_string("emails/admin_booking_alert.html", {
-        "username": self.request.user.username,
-        "room": room,
-        "check_in": check_in,
-        "check_out": check_out,
+    return Response(data)
+
+
+# ==================================================
+# ADMIN DASHBOARD
+# ==================================================
+@api_view(["GET"])
+def admin_dashboard(request):
+    if not request.user.is_staff:
+        raise ValidationError("Admin access only.")
+
+    return Response({
+        "total_bookings": Booking.objects.count(),
+        "paid_bookings": Booking.objects.filter(payment_status="paid").count(),
+        "pending_payments": Booking.objects.filter(payment_status="pending").count(),
+        "total_rooms": Room.objects.count(),
     })
-
-    msg = EmailMultiAlternatives(subject, text_content, settings.DEFAULT_FROM_EMAIL, settings.ADMIN_EMAILS)
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
-
-def destroy(self, request, *args, **kwargs):
-    booking = self.get_object()
-    room = booking.room
-    check_in = booking.check_in
-    check_out = booking.check_out
-    username = booking.user.username
-
-    response = super().destroy(request, *args, **kwargs)
-
-    # Admin cancellation email
-    subject = "Booking Cancelled"
-    text_content = f"Booking cancelled: {username} cancelled Room {room.room_number} from {check_in} to {check_out}."
-    html_content = render_to_string("emails/admin_booking_cancel.html", {
-        "username": username,
-        "room": room,
-        "check_in": check_in,
-        "check_out": check_out,
-    })
-
-    msg = EmailMultiAlternatives(subject, text_content, settings.DEFAULT_FROM_EMAIL, settings.ADMIN_EMAILS)
-    msg.attach_alternative(html_content, "text/html")
-    msg.send()
-
-    return response
